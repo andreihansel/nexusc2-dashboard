@@ -41,6 +41,15 @@ const navItems = [
             </svg>
         ),
     },
+    {
+        label: "Builder",
+        href: "/builder",
+        icon: (
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
+            </svg>
+        ),
+    },
 ];
 
 export default function Sidebar() {
@@ -80,8 +89,8 @@ export default function Sidebar() {
                             key={item.href}
                             href={item.href}
                             className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${isActive
-                                    ? "bg-emerald-500/10 text-emerald-400 shadow-sm"
-                                    : "text-zinc-400 hover:text-white hover:bg-zinc-800/50"
+                                ? "bg-emerald-500/10 text-emerald-400 shadow-sm"
+                                : "text-zinc-400 hover:text-white hover:bg-zinc-800/50"
                                 }`}
                         >
                             <span className={isActive ? "text-emerald-400" : "text-zinc-500"}>{item.icon}</span>

