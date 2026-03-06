@@ -39,3 +39,8 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# NexusC2 — operational security
+# Keep schema and any deployment artifacts out of public repos
+supabase_schema.sql
+*.sql
