@@ -53,8 +53,8 @@ export default async function LootPage({
                         key={cat}
                         href={`/loot${cat === "all" ? "" : `?category=${cat}`}`}
                         className={`px-3.5 py-1.5 rounded-xl text-xs font-medium capitalize transition-all ${activeCategory === cat
-                                ? "bg-emerald-500/15 text-emerald-400 border border-emerald-500/30"
-                                : "bg-zinc-800/50 text-zinc-400 border border-zinc-800/50 hover:border-zinc-700/50 hover:text-white"
+                            ? "bg-emerald-500/15 text-emerald-400 border border-emerald-500/30"
+                            : "bg-zinc-800/50 text-zinc-400 border border-zinc-800/50 hover:border-zinc-700/50 hover:text-white"
                             }`}
                     >
                         {cat !== "all" && <span className="mr-1.5">{categoryIcons[cat]}</span>}
@@ -85,8 +85,8 @@ export default async function LootPage({
                                     </div>
                                     <div className="flex items-center gap-3">
                                         <span className={`text-xs px-2 py-0.5 rounded-md capitalize ${item.priority === 0 ? "bg-red-500/15 text-red-400" :
-                                                item.priority === 1 ? "bg-amber-500/15 text-amber-400" :
-                                                    "bg-zinc-800 text-zinc-400"
+                                            item.priority === 1 ? "bg-amber-500/15 text-amber-400" :
+                                                "bg-zinc-800 text-zinc-400"
                                             }`}>
                                             {item.priority === 0 ? "Critical" : item.priority === 1 ? "Medium" : "Low"}
                                         </span>
@@ -100,9 +100,19 @@ export default async function LootPage({
                                     </div>
                                 </summary>
                                 <div className="px-6 pb-4">
-                                    <pre className="bg-zinc-950 border border-zinc-800/50 rounded-xl p-4 text-xs text-zinc-300 font-mono overflow-x-auto max-h-96 whitespace-pre-wrap">
-                                        {item.content || "No content"}
-                                    </pre>
+                                    {item.category === "screenshot" && item.content?.startsWith("data:image") ? (
+                                        <div className="bg-zinc-950 border border-zinc-800/50 rounded-xl p-4 overflow-hidden">
+                                            <img
+                                                src={item.content}
+                                                alt={item.title}
+                                                className="w-full rounded-lg border border-zinc-800/30"
+                                            />
+                                        </div>
+                                    ) : (
+                                        <pre className="bg-zinc-950 border border-zinc-800/50 rounded-xl p-4 text-xs text-zinc-300 font-mono overflow-x-auto max-h-96 whitespace-pre-wrap">
+                                            {item.content || "No content"}
+                                        </pre>
+                                    )}
                                 </div>
                             </details>
                         ))}
